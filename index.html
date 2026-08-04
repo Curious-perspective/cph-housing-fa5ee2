@@ -1153,16 +1153,30 @@ function applyBlob(o){ if(!o||typeof o!=='object') return;
   DEC=migrateDec(o.decisions&&typeof o.decisions==='object'?o.decisions:{});
   pendingExport=+o.pendingExport||0; notes=o.notes||{}; }
 
+// Picks baked in at build time so a fresh browser starts with them instead of
+// needing a share link. Seeded ONLY when this origin has nothing stored — the
+// moment you make a decision here, save() writes your own blob and the seed is
+// never consulted again. It cannot overwrite work in progress.
+const SEED={"bp-5130907":"opt1","bp-5653756":"opt1","bp-5563136":"opt1","bp-4661241":"opt1","bp-5655530":"opt1","bp-5649212":"opt1","lb-1492385":"opt1","ak-697837":"opt1","bp-5247110":"opt1","bp-5639525":"opt1","lb-1846488":"opt2","bh-5657767":"opt2","rt-29447634":"opt2","bp-5446108":"opt1","ak-672406":"opt2","bp-5362576":"opt2","bp-5554117":"opt2","bp-5033191":"opt2","bp-5650581":"rejected","bp-5324386":"rejected","bh-5679089":"rejected","ak-593045":"rejected","bp-5364994":"rejected","lb-1901389":"rejected","bp-5640316":"rejected","bz-10713081":"rejected","bp-5623068":"rejected","bp-4973352":"opt2","bp-5650014":"opt2","bp-4527718":"opt1","bp-5043618":"rejected","bp-5655184":"opt1","bp-4690918":"opt1","bsf-14466532":"opt2","bs-90ddce63-e3e2-4d03-89a1-b71b73ed2f9c":"opt2","bp-5655269":"rejected","bs-6a6419a0-faed-41f1-8801-b0c750e118c6":"opt2","bp-5357919":"opt1","bh-5687757":"rejected","bh-5681189":"opt2","rt-34374921":"opt2","bs-ea26e79a-8ddd-4033-92b3-3a99130e3789":"opt2","ak-690318":"rejected"};
+function seedIfEmpty(){
+  if(Object.keys(DEC).length) return false;
+  const s=migrateDec(JSON.parse(JSON.stringify(SEED)));
+  if(!Object.keys(s).length) return false;
+  DEC=s; return true;
+}
+
 async function initStore(){
   try{ localStorage.setItem(KEY+'__t','1'); localStorage.removeItem(KEY+'__t'); storeMode='local'; }
   catch(e){ storeMode=null; }
   if(storeMode==='local'){
     try{ const s=localStorage.getItem(KEY); if(s) applyBlob(JSON.parse(s)); }catch(e){}
+    seedIfEmpty();
     return;
   }
   try{ IDB=await idbOpen(); const s=await idbReq('kv','readonly',st=>st.get(KEY));
        storeMode='idb'; if(s) applyBlob(typeof s==='string'?JSON.parse(s):s); }
   catch(e){ storeMode='none'; }
+  seedIfEmpty();
 }
 function save(){
   const blob=JSON.stringify({v:1,decisions:DEC,pendingExport,notes,savedAt:new Date().toISOString()});
