@@ -1203,6 +1203,25 @@ const delWhy=id=>(DELISTED[id]||[])[1]||'';
 const delAddr=id=>(DELISTED[id]||[])[0]||id;
 let PRUNED=null;         // {id: tier} removed on load, so it can be undone
 
+// Dedupe collapses several portal listings into one card, and the survivor keeps
+// its own id -- so a decision saved against an absorbed id points at nothing and
+// silently disappears from the counts, even though the flat is still listed. The
+// mapping we need is already on the card: also_on carries every id that merged
+// into it. Re-key rather than drop; the pick is the same flat.
+function migrateMerged(){
+  const live=new Set(PROPS.map(p=>p.id));
+  const host={};
+  for(const p of PROPS) for(const a of (p.also_on||[])) if(a&&a.id) host[a.id]=p.id;
+  let moved=0;
+  for(const id of Object.keys(DEC)){
+    if(live.has(id)) continue;
+    const to=host[id];
+    // Never overwrite a decision already made on the surviving card.
+    if(to && !DEC[to]){ DEC[to]=DEC[id]; delete DEC[id]; moved++; }
+  }
+  return moved;
+}
+
 // Move any pick that points at a delisted listing out of Option 1 / Option 2.
 // Reversible, and it never touches a pick we have no removal evidence for.
 function pruneDelisted(){
@@ -1230,14 +1249,14 @@ async function initStore(){
   if(storeMode==='local'){
     try{ const s=localStorage.getItem(KEY); if(s) applyBlob(JSON.parse(s)); }catch(e){}
     seedIfEmpty();
-    if(pruneDelisted()) save();
+    if(migrateMerged()|pruneDelisted()) save();
     return;
   }
   try{ IDB=await idbOpen(); const s=await idbReq('kv','readonly',st=>st.get(KEY));
        storeMode='idb'; if(s) applyBlob(typeof s==='string'?JSON.parse(s):s); }
   catch(e){ storeMode='none'; }
   seedIfEmpty();
-  if(pruneDelisted()) save();
+  if(migrateMerged()|pruneDelisted()) save();
 }
 function save(){
   const blob=JSON.stringify({v:1,decisions:DEC,pendingExport,notes,savedAt:new Date().toISOString()});
